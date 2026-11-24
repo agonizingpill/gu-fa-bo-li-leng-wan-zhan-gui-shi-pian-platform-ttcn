@@ -68,6 +68,7 @@ label span { display:block; color:var(--soft); font-size:.875em }
 
 .top { border-top:7px solid var(--accent) }
 .work.flip .actions { border-inline-end:7px solid var(--tint) }
+.audit { margin-top:clamp(1rem,2.5vw,2.5rem); display:grid; gap:1rem; max-width:64rem }
 .title { max-width:64rem }
 .brand { font-weight:800 }
 #workspace { background-image:repeating-linear-gradient(90deg,transparent 0 39px,oklch(87% .031 58 / .35) 39px 40px) }

@@ -1,7 +1,10 @@
-        import {workspace} from '../workspace.js';
-        import {el} from '../dom.js';
+import {request} from '../api.js';
+import {display, el} from '../dom.js';
+import {evidence} from '../store.js';
+import {status} from '../widgets.js';
+import {workspace} from '../workspace.js';
 
-        const page = {
+const page = {
   "title": "温度 × 片厚 · 拟合曲线",
   "module": "预测曲线签注",
   "caption": "预测曲线签注",
@@ -62,6 +65,31 @@
       "success": "已写入"
     },
     {
+      "name": "sweep_curve",
+      "label": "比选正则强度档位",
+      "path": "/profiles/sweep-curve",
+      "fields": [
+        {
+          "name": "coupon",
+          "label": "基准试片",
+          "kind": "text",
+          "initial": "GP-NEW"
+        },
+        {
+          "name": "penalties",
+          "label": "正则强度档位（JSON 数组）",
+          "kind": "json",
+          "initial": [0.01, 0.035, 0.1]
+        }
+      ],
+      "help": "各档沿用开跑时封存的试片分组，按训练侧交叉验证误差定档，定档后才测胜档留出误差；中断续跑时不重复记分。",
+      "roles": [
+        "operator",
+        "reviewer"
+      ],
+      "success": "已写入"
+    },
+    {
       "name": "sign_profile",
       "label": "签注拟合曲线",
       "path": "/profiles/sign-profile",
@@ -88,9 +116,51 @@
   ]
 };
 
-        export const {title} = page;
-        export const key = "profiles";
-        export async function render(root, role) {
-          await workspace(root, role, page);
+function auditView(row) {
+  const curve = row.curve || {};
+  const pairs = [
+    ['曲线版本', row.code],
+    ['基准试片', row.coupon],
+    ['拟合弯度 mm', row.prediction],
+    ['胜档留出 MAE mm', row.mae],
+    ['拟合编号', row.token]
+  ];
+  if (curve.penalty !== undefined) pairs.push(['胜档正则强度', curve.penalty]);
+  if (Array.isArray(curve.tiers))
+    pairs.push(['各档交叉验证 MAE mm', curve.tiers.map(tier => tier.penalty + ' → ' + tier.cv_mae).join('；')]);
+  if (curve.grouping) {
+    pairs.push(['训练分组', curve.grouping.train.join('、')]);
+    pairs.push(['留出分组', curve.grouping.holdout.join('、')]);
+  }
+  if (Array.isArray(curve.terms)) pairs.push(['保留项', curve.terms]);
+  return el('article', {class:'record'}, el('h3', {}, '核对 ' + row.code),
+    el('dl', {}, pairs.flatMap(([key, value]) => [el('dt', {}, key), el('dd', {}, display(value))])));
+}
 
-        }
+function auditPanel() {
+  const output = el('div', {class:'audit-output'});
+  const form = el('form', {class:'action', id:'audit_lookup'},
+    el('h3', {}, '按编号核对曲线'),
+    el('p', {}, '计算记录过期后，仍可按拟合编号核对原分组、各档误差和胜档留出误差。'),
+    el('div', {class:'fields'}, el('label', {}, el('span', {}, '拟合编号'),
+      el('input', {name:'token', required:'', type:'text', value:evidence.get()}))),
+    el('button', {type:'submit'}, '核对'));
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const token = String(new FormData(form).get('token')).trim();
+    try {
+      const row = await request('/profiles/audit/' + encodeURIComponent(token));
+      output.replaceChildren(auditView(row));
+    } catch (error) {
+      output.replaceChildren(status(error.message, 'error'));
+    }
+  });
+  return el('section', {class:'audit'}, form, output);
+}
+
+export const {title} = page;
+export const key = "profiles";
+export async function render(root, role) {
+  await workspace(root, role, page);
+  root.appendChild(auditPanel());
+}

@@ -17,11 +17,25 @@ def fit_curve(conn, user, data):
     return submit(user, {'history':history,'coupon':coupon,'penalty':data.penalty})
 
 
+def sweep_curve(conn, user, data):
+    coupon = get(conn, coupons, data.coupon)
+    need(coupon['locked'], '试片尚未经过尺规见证')
+    penalties = sorted({round(penalty, 6) for penalty in data.penalties})
+    need(len(penalties) >= 2, '比选至少需要两档不同的正则强度')
+    need(all(.001 <= penalty <= .3 for penalty in penalties), '正则强度超出试制档范围')
+    history = [item for item in scan(conn, coupons) if item['locked'] and item['code'] != data.coupon]
+    need(len(history) >= 12, '已确认历史少于十二张')
+    return submit(user, {'history':history,'coupon':coupon,'penalties':penalties})
+
+
 def sign_profile(conn, user, data):
     run = result(user, data.token)
     target, metric = run['input']['coupon'], run['result']
     current = get(conn, coupons, target['code'])
     need(current == target, '试片与拟合快照不相容')
     need(metric['prediction'] > 0 and metric['mae'] < 5, '曲线超过台面验证误差预算')
+    curve = {'terms':metric['terms'],'held_out':metric['held_out']}
+    if 'tiers' in metric:
+        curve.update(penalty=metric['penalty'], tiers=metric['tiers'], grouping=metric['grouping'])
     return insert(conn, profiles, code=data.code, coupon=target['code'], prediction=metric['prediction'],
-        mae=metric['mae'], curve={'terms':metric['terms'],'held_out':metric['held_out']}, token=data.token)
+        mae=metric['mae'], curve=curve, token=data.token)

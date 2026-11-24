@@ -53,10 +53,12 @@ Compose 运行 Nginx、Python FastAPI、独立 Redis 消费进程、SQL 数据�
 |---|---|---|
 | 弯模与行程 | `/jigs` /jigs/calibrate | `frontend/src/pages/jigs.js` |
 | 温区试片 | `/coupons` /coupons/record-coupon，/coupons/witness | `frontend/src/pages/coupons.js` |
-| 预测曲线签注 | `/profiles` /profiles/fit-curve，/profiles/sign-profile | `frontend/src/pages/profiles.js` |
+| 预测曲线签注 | `/profiles` /profiles/fit-curve，/profiles/sweep-curve，/profiles/sign-profile，/profiles/audit/{token} | `frontend/src/pages/profiles.js` |
 | 试制工位委托 | `/work_orders` /work_orders/book-jig，/work_orders/complete | `frontend/src/pages/work_orders.js` |
 
 SQL 实体与约束在 `backend/domain` 下维护。前端使用原生 ES modules。核心算子为 PolynomialFeatures + Lasso。算法按温度排序每四条留出一条；训练拟合二次多项式和标准化。报告使用 mm 和可复现特征系数。
+
+同一基准试片可发起多档正则强度比选（/profiles/sweep-curve）：各档沿用开跑时封存的试片分组，按训练侧四折交叉验证误差定档，定档后才用留出试片测胜档误差。worker 按档位在 Redis 落检查点，中断续跑或重试时已算出的档位不重复记分；并发收尾由原子锁保证只产生一个可签注的胜档。签注时把原分组、各档误差和胜档留出误差随曲线入库，计算记录过期后仍可在曲线页面按拟合编号（/profiles/audit/{token}）核对。
 
 数据为模拟试制记录。工单留在本地数据库供核查。
 
